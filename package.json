@@ -1,0 +1,15 @@
+{
+  "name": "panel-camila",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Panel de evaluación de Camila (Actual vs Paralela)",
+  "scripts": {
+    "start": "serve . --listen tcp://0.0.0.0:${PORT:-3000} --single --no-clipboard"
+  },
+  "dependencies": {
+    "serve": "^14.2.4"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

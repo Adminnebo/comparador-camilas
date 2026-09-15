@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Panel de evaluación · Camila</title>
+
+<!-- ============================================================
+     CONFIGURACIÓN — pegá tus 3 datos acá abajo
+     ============================================================ -->
+<script>
+  const CONFIG = {
+    // 1) URL de tu proyecto Supabase, ej: https://abcd1234.supabase.co
+    supabaseUrl:  "https://bewpkmgcnzukyouplbwm.supabase.co/",
+    // 2) anon public key (Project settings → API → anon public)
+    supabaseKey:  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJld3BrbWdjbnp1a3lvdXBsYndtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2ODcyNjcsImV4cCI6MjA5OTI2MzI2N30.NjapIRg9HNxt_7A9fzMk8ZorieVJ_ceyGzqHXoFuor0",
+    // 3) Nombre de la tabla de mensajes (la que tiene mensaje / respuesta_camila_original)
+    tablaMensajes: "mensajes_chat",
+
+    // Tabla de puntuaciones (creada por supabase-setup.sql). Normalmente no se cambia.
+    tablaRatings: "camila_ratings",
+
+    // --- Nombres de columnas (ajustá solo si tu tabla usa otros) ---
+    col: {
+      id:        "id",
+      contacto:  "contact_id",   // agrupa la conversación
+      telefono:  "telefono",
+      usuario:   "user_id",
+      canal:     "canal",
+      direccion: "direccion",    // 'entrante' = cliente, 'saliente' = Camila
+      fecha:     "created_at",
+      mensaje:   "mensaje",                    // = Camila PARALELA (derecha) en salientes
+      original:  "respuesta_camila_original",  // = Camila ACTUAL  (izquierda) en salientes
+    },
+    valorEntrante: "entrante", // valor de 'direccion' para mensajes del cliente
+  };
+</script>
+
+<style>
+  :root{
+    --bg:#f4f5f7; --panel:#ffffff; --panel-2:#f9fafb; --border:#e5e7eb;
+    --text:#111827; --muted:#6b7280; --faint:#9ca3af;
+    --cliente-bg:#eef2ff; --cliente-bd:#c7d2fe;
+    --actual:#0f766e; --actual-bg:#ecfdf5; --actual-bd:#99f6e4;
+    --paralela:#7c3aed; --paralela-bg:#f5f3ff; --paralela-bd:#ddd6fe;
+    --star:#f59e0b; --star-off:#d1d5db;
+    --accent:#2563eb; --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+  }
+  :root:not([data-theme="light"]){ @media (prefers-color-scheme: dark){
+    --bg:#0b0f14; --panel:#131a22; --panel-2:#0f151c; --border:#243040;
+    --text:#e5edf5; --muted:#9fb0c0; --faint:#6b7c8c;
+    --cliente-bg:#1c2233; --cliente-bd:#33406a;
+    --actual:#2dd4bf; --actual-bg:#0c2420; --actual-bd:#155e56;
+    --paralela:#a78bfa; --paralela-bg:#1c1633; --paralela-bd:#4c3a86;
+    --star:#fbbf24; --star-off:#3b475a;
+    --accent:#60a5fa; --shadow:0 1px 3px rgba(0,0,0,.4);
+  }}
+  :root[data-theme="dark"]{
+    --bg:#0b0f14; --panel:#131a22; --panel-2:#0f151c; --border:#243040;
+    --text:#e5edf5; --muted:#9fb0c0; --faint:#6b7c8c;
+    --cliente-bg:#1c2233; --cliente-bd:#33406a;
+    --actual:#2dd4bf; --actual-bg:#0c2420; --actual-bd:#155e56;
+    --paralela:#a78bfa; --paralela-bg:#1c1633; --paralela-bd:#4c3a86;
+    --star:#fbbf24; --star-off:#3b475a;
+    --accent:#60a5fa; --shadow:0 1px 3px rgba(0,0,0,.4);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  button{font:inherit;cursor:pointer}
+
+  /* Header */
+  header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    padding:12px 20px;background:var(--panel);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:5}
+  header h1{font-size:16px;margin:0;font-weight:700;display:flex;align-items:center;gap:8px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--faint)}
+  .dot.ok{background:#22c55e}.dot.err{background:#ef4444}
+  .spacer{flex:1}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;
+    background:var(--panel-2);border:1px solid var(--border);font-size:12px;color:var(--muted);white-space:nowrap}
+  .chip b{color:var(--text);font-variant-numeric:tabular-nums}
+  .chip.actual b{color:var(--actual)} .chip.paralela b{color:var(--paralela)}
+  input.name{padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);width:150px}
+  .btn{padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--panel-2);color:var(--text)}
+  .btn:hover{border-color:var(--accent)}
+
+  /* Layout */
+  .wrap{display:grid;grid-template-columns:300px 1fr;height:calc(100vh - 58px)}
+  aside{border-right:1px solid var(--border);background:var(--panel);overflow-y:auto}
+  aside .search{padding:10px}
+  aside .search input{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel-2);color:var(--text)}
+  .conv{padding:11px 14px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;flex-direction:column;gap:2px}
+  .conv:hover{background:var(--panel-2)}
+  .conv.active{background:var(--cliente-bg);border-left:3px solid var(--accent);padding-left:11px}
+  .conv .top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+  .conv .id{font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .conv .when{font-size:11px;color:var(--faint);white-space:nowrap}
+  .conv .meta{font-size:11px;color:var(--muted);display:flex;gap:8px}
+
+  main{overflow-y:auto;padding:20px;scroll-behavior:smooth}
+  .thread{max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+  .daysep{text-align:center;color:var(--faint);font-size:11px;margin:6px 0;text-transform:uppercase;letter-spacing:.05em}
+
+  /* Cliente */
+  .cliente{max-width:70%;align-self:flex-start;background:var(--cliente-bg);border:1px solid var(--cliente-bd);
+    border-radius:14px 14px 14px 4px;padding:10px 13px}
+  .cliente .who{font-size:11px;font-weight:700;color:var(--accent);margin-bottom:3px}
+  .cliente .txt{white-space:pre-wrap;word-break:break-word}
+  .cliente .time{font-size:10px;color:var(--faint);margin-top:4px}
+
+  /* Comparación Camila */
+  .cmp{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .card{border:1px solid var(--border);border-radius:14px;background:var(--panel);box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column}
+  .card.actual{border-color:var(--actual-bd)} .card.paralela{border-color:var(--paralela-bd)}
+  .card .head{display:flex;align-items:center;gap:8px;padding:9px 13px;font-weight:700;font-size:12.5px}
+  .card.actual .head{background:var(--actual-bg);color:var(--actual)}
+  .card.paralela .head{background:var(--paralela-bg);color:var(--paralela)}
+  .card .head .tag{margin-left:auto;font-size:10px;font-weight:600;opacity:.7}
+  .card .body{padding:12px 13px;white-space:pre-wrap;word-break:break-word;flex:1}
+  .card .empty{color:var(--faint);font-style:italic}
+  .card .rate{display:flex;align-items:center;gap:8px;padding:9px 13px;border-top:1px solid var(--border);background:var(--panel-2)}
+  .stars{display:inline-flex;gap:2px}
+  .star{background:none;border:none;padding:2px;font-size:20px;line-height:1;color:var(--star-off);transition:transform .05s}
+  .star.on{color:var(--star)} .star:hover{transform:scale(1.15)}
+  .rate .state{font-size:11px;color:var(--muted);margin-left:auto}
+  .rate .state.saved{color:#22c55e}
+
+  .time-badge{text-align:center;font-size:10px;color:var(--faint)}
+
+  /* Setup / estados */
+  .center{display:flex;align-items:center;justify-content:center;height:calc(100vh - 58px);padding:24px}
+  .box{max-width:560px;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:24px;box-shadow:var(--shadow)}
+  .box h2{margin:0 0 8px} .box code{background:var(--panel-2);padding:2px 6px;border-radius:5px;border:1px solid var(--border)}
+  .box ol{padding-left:18px;color:var(--muted)} .box li{margin:6px 0}
+  .err{color:#ef4444}
+
+  @media (max-width:860px){
+    .wrap{grid-template-columns:1fr;height:auto}
+    aside{max-height:220px} .cliente{max-width:100%}
+    .cmp{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span id="conn" class="dot"></span> Evaluación de Camila</h1>
+  <div class="spacer"></div>
+  <span class="chip actual" title="Promedio Camila Actual">Actual <b id="avgA">–</b></span>
+  <span class="chip paralela" title="Promedio Camila Paralela">Paralela <b id="avgP">–</b></span>
+  <span class="chip">Puntuadas <b id="cnt">0</b></span>
+  <input id="evaluador" class="name" placeholder="Tu nombre" />
+  <button id="refresh" class="btn">↻ Actualizar</button>
+  <button id="theme" class="btn" title="Tema">◐</button>
+</header>
+
+<div id="app"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+(function(){
+  const $ = s => document.querySelector(s);
+  const app = $("#app");
+  const C = CONFIG.col;
+
+  // ---- Tema ----
+  const savedTheme = safeGet("panel-theme");
+  if(savedTheme) document.documentElement.setAttribute("data-theme", savedTheme);
+  $("#theme").onclick = () => {
+    const cur = document.documentElement.getAttribute("data-theme");
+    const next = cur === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    safeSet("panel-theme", next);
+  };
+
+  // ---- Evaluador ----
+  const evalInput = $("#evaluador");
+  evalInput.value = safeGet("panel-evaluador") || "";
+  evalInput.oninput = () => safeSet("panel-evaluador", evalInput.value.trim());
+  const evaluador = () => (evalInput.value.trim() || "anonimo");
+
+  // ---- Validar config ----
+  if (CONFIG.supabaseUrl.startsWith("PEGA") || CONFIG.supabaseKey.startsWith("PEGA") || CONFIG.tablaMensajes.startsWith("PEGA")) {
+    app.innerHTML = `<div class="center"><div class="box">
+      <h2>Falta configurar</h2>
+      <p>Abrí este archivo con un editor y completá el bloque <code>CONFIG</code> al inicio:</p>
+      <ol>
+        <li><code>supabaseUrl</code> — la URL de tu proyecto Supabase</li>
+        <li><code>supabaseKey</code> — la <b>anon public</b> key</li>
+        <li><code>tablaMensajes</code> — el nombre de tu tabla de mensajes</li>
+      </ol>
+      <p>Y ejecutá <code>supabase-setup.sql</code> en el SQL Editor para crear la tabla de puntuaciones.</p>
+    </div></div>`;
+    return;
+  }
+
+  const db = supabase.createClient(CONFIG.supabaseUrl.replace(/\/+$/,""), CONFIG.supabaseKey);
+
+  let mensajes = [];      // filas crudas
+  let convos = [];        // [{key, label, rows, last}]
+  let ratings = new Map();// "id:variante:evaluador" -> {estrellas}
+  let activeKey = null;
+  let filtro = "";
+
+  const conn = $("#conn");
+  const setConn = (ok,msg) => { conn.className = "dot " + (ok?"ok":"err"); conn.title = msg||""; };
+
+  function fmtTime(iso){ const d=new Date(iso); return d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}); }
+  function fmtDay(iso){ const d=new Date(iso); return d.toLocaleDateString([], {weekday:"short",day:"2-digit",month:"short"}); }
+  function fmtRel(iso){ const d=new Date(iso), s=(Date.now()-d)/1000;
+    if(s<3600) return Math.floor(s/60)+"m"; if(s<86400) return Math.floor(s/3600)+"h";
+    return Math.floor(s/86400)+"d"; }
+
+  async function cargar(isAuto=false){
+    // No interrumpir si el usuario está escribiendo (buscador / nombre)
+    if(isAuto && document.activeElement && document.activeElement.tagName === "INPUT") return;
+    if(!isAuto) setConn(false,"cargando…");
+    // Recordar el scroll para no saltar en refrescos automáticos
+    const _main = document.querySelector("main");
+    const _wasBottom = _main ? (_main.scrollHeight - _main.scrollTop - _main.clientHeight < 60) : true;
+    const _savedTop = _main ? _main.scrollTop : 0;
+    try{
+      // 1) Buscar los turnos comparables (ambas Camilas con contenido).
+      //    Así ubicamos las conversaciones relevantes sin traer las 8k filas.
+      const { data:comps, error:eC } = await db.from(CONFIG.tablaMensajes)
+        .select(`${C.id},${C.contacto},${C.telefono},${C.usuario}`)
+        .neq(C.direccion, CONFIG.valorEntrante)
+        .not(C.mensaje, "is", null)
+        .not(C.original, "is", null)
+        .limit(5000);
+      if(eC) throw eC;
+
+      const keys = [...new Set((comps||[])
+        .map(r => r[C.contacto] || r[C.telefono] || r[C.usuario])
+        .filter(Boolean))];
+
+      // 2) Traer todas las filas de esas conversaciones (para el contexto del cliente)
+      //    + las puntuaciones existentes.
+      let msgs = [];
+      if(keys.length){
+        const { data, error:e1 } = await db.from(CONFIG.tablaMensajes)
+          .select("*")
+          .in(C.contacto, keys)
+          .order(C.fecha,{ascending:true})
+          .limit(10000);
+        if(e1) throw e1;
+        msgs = data || [];
+      }
+      const { data:rts, error:e2 } = await db.from(CONFIG.tablaRatings).select("*").limit(20000);
+      if(e2) console.warn("ratings:", e2.message);
+
+      mensajes = msgs;
+      ratings = new Map();
+      (rts||[]).forEach(r => ratings.set(r.message_id+":"+r.variante+":"+r.evaluador, r));
+      agrupar();
+      setConn(true, (comps?comps.length:0)+" comparables · "+keys.length+" conversaciones");
+      render(!isAuto);   // carga manual: baja al último. Auto: conserva el scroll.
+      if(isAuto){
+        const m = document.querySelector("main");
+        if(m) m.scrollTop = _wasBottom ? m.scrollHeight : _savedTop;
+      }
+    }catch(err){
+      setConn(false, err.message);
+      if(isAuto) return;   // en auto no reemplazamos la pantalla por el error
+      app.innerHTML = `<div class="center"><div class="box">
+        <h2 class="err">No pude leer los datos</h2>
+        <p class="err">${escapeHtml(err.message||String(err))}</p>
+        <p>Revisá: nombre de la tabla (<code>${escapeHtml(CONFIG.tablaMensajes)}</code>), la anon key,
+        y que exista una policy de <b>select</b> (RLS) sobre esa tabla.</p>
+      </div></div>`;
+    }
+  }
+
+  // Un turno "comparable" = saliente con contenido en AMBAS Camilas
+  const conTexto = v => v != null && String(v).trim() !== "";
+  const tieneAmbas = r =>
+    r[C.direccion] !== CONFIG.valorEntrante &&
+    conTexto(r[C.original]) && conTexto(r[C.mensaje]);
+
+  function agrupar(){
+    const m = new Map();
+    for(const r of mensajes){
+      const key = r[C.contacto] || r[C.telefono] || r[C.usuario] || "sin-id";
+      if(!m.has(key)) m.set(key, []);
+      m.get(key).push(r);
+    }
+    convos = [...m.entries()].map(([key,rows])=>({
+      key,
+      label: rows[0][C.telefono] || key,
+      canal: rows[0][C.canal] || "",
+      rows,
+      last: rows[rows.length-1][C.fecha],
+      comparables: rows.filter(tieneAmbas).length,
+    }))
+    // Solo conversaciones que tengan al menos un turno con ambas Camilas
+    .filter(c => c.comparables > 0)
+    .sort((a,b)=> new Date(b.last)-new Date(a.last));
+    if((!activeKey || !convos.some(c=>c.key===activeKey)) && convos.length) activeKey = convos[0].key;
+  }
+
+  function myRating(id, variante){
+    const r = ratings.get(id+":"+variante+":"+evaluador());
+    return r ? r.estrellas : 0;
+  }
+
+  // Promedios (sobre puntuaciones del evaluador actual)
+  function calcAvg(){
+    let sa=0,na=0,sp=0,np=0,turns=new Set();
+    for(const [k,r] of ratings){
+      if(r.evaluador !== evaluador()) continue;
+      if(r.variante==="actual"){ sa+=r.estrellas; na++; }
+      else { sp+=r.estrellas; np++; }
+      turns.add(r.message_id);
+    }
+    $("#avgA").textContent = na? (sa/na).toFixed(2) : "–";
+    $("#avgP").textContent = np? (sp/np).toFixed(2) : "–";
+    $("#cnt").textContent = turns.size;
+    // resaltar ganador
+    $("#avgA").parentElement.style.outline = (na&&np&&sa/na>sp/np) ? "2px solid var(--actual)" : "none";
+    $("#avgP").parentElement.style.outline = (na&&np&&sp/np>sa/na) ? "2px solid var(--paralela)" : "none";
+  }
+
+  async function puntuar(id, variante, estrellas){
+    const payload = { message_id:id, variante, estrellas, evaluador:evaluador() };
+    ratings.set(id+":"+variante+":"+evaluador(), payload); // optimista
+    renderStars(id,variante,"guardando…");
+    calcAvg();
+    const { error } = await db.from(CONFIG.tablaRatings)
+      .upsert(payload, { onConflict:"message_id,variante,evaluador" });
+    renderStars(id, variante, error ? "error" : "guardado ✓", !error);
+    if(error) setConn(false, error.message);
+  }
+
+  function starsHtml(id, variante){
+    const v = myRating(id,variante);
+    let h = `<span class="stars" data-id="${id}" data-var="${variante}">`;
+    for(let i=1;i<=5;i++) h += `<button class="star ${i<=v?'on':''}" data-n="${i}">★</button>`;
+    h += `</span><span class="state" data-state="${id}:${variante}"></span>`;
+    return h;
+  }
+  function renderStars(id, variante, stateText, saved){
+    const wrap = document.querySelector(`.stars[data-id="${id}"][data-var="${variante}"]`);
+    if(wrap){ const v=myRating(id,variante);
+      [...wrap.children].forEach((b,i)=> b.classList.toggle("on", (i+1)<=v)); }
+    const st = document.querySelector(`.state[data-state="${id}:${variante}"]`);
+    if(st){ st.textContent = stateText||""; st.className = "state"+(saved?" saved":""); }
+  }
+
+  function render(scrollBottom=false){
+    if(!convos.length){ app.innerHTML = `<div class="center"><div class="box"><h2>Sin conversaciones</h2><p>La tabla no devolvió filas.</p></div></div>`; return; }
+    app.innerHTML = `
+      <div class="wrap">
+        <aside>
+          <div class="search"><input id="find" placeholder="Buscar contacto…" value="${escapeHtml(filtro)}"/></div>
+          <div id="convlist"></div>
+        </aside>
+        <main><div class="thread" id="thread"></div></main>
+      </div>`;
+    $("#find").oninput = e => { filtro = e.target.value; renderList(); };
+    renderList();
+    renderThread(scrollBottom);
+  }
+
+  function renderList(){
+    const list = $("#convlist"); if(!list) return;
+    const f = filtro.toLowerCase();
+    list.innerHTML = convos
+      .filter(c => !f || String(c.key).toLowerCase().includes(f) || String(c.label).toLowerCase().includes(f))
+      .map(c => `<div class="conv ${c.key===activeKey?'active':''}" data-key="${escapeHtml(c.key)}">
+        <div class="top"><span class="id">${escapeHtml(c.label)}</span><span class="when">${fmtRel(c.last)}</span></div>
+        <div class="meta"><span>${escapeHtml(c.canal||'')}</span><span>${c.comparables} comparables</span></div>
+      </div>`).join("");
+    list.querySelectorAll(".conv").forEach(el => el.onclick = () => {
+      activeKey = el.dataset.key; renderList(); renderThread(true);
+    });
+  }
+
+  function renderThread(scrollBottom=false){
+    const t = $("#thread"); if(!t) return;
+    const conv = convos.find(c=>c.key===activeKey); if(!conv){ t.innerHTML=""; return; }
+    let html = "", lastDay = "";
+    for(const r of conv.rows){
+      const esCliente = r[C.direccion] === CONFIG.valorEntrante;
+      // Solo se muestran: mensajes del cliente (contexto) y turnos con AMBAS Camilas.
+      if(!esCliente && !tieneAmbas(r)) continue;
+
+      const day = fmtDay(r[C.fecha]);
+      if(day!==lastDay){ html += `<div class="daysep">${day}</div>`; lastDay=day; }
+
+      if(esCliente){
+        html += `<div class="cliente">
+          <div class="who">Cliente</div>
+          <div class="txt">${escapeHtml(r[C.mensaje]||"")}</div>
+          <div class="time">${fmtTime(r[C.fecha])}</div></div>`;
+      } else {
+        const actual = r[C.original];   // Camila Actual (izquierda)
+        const paralela = r[C.mensaje];  // Camila Paralela (derecha)
+        html += `<div>
+          <div class="time-badge">Respuesta de Camila · ${fmtTime(r[C.fecha])}</div>
+          <div class="cmp">
+            ${cardHtml(r[C.id], "actual", "Camila Actual", actual)}
+            ${cardHtml(r[C.id], "paralela", "Camila Paralela", paralela)}
+          </div></div>`;
+      }
+    }
+    t.innerHTML = html || `<div class="time-badge">Esta conversación no tiene turnos con ambas Camilas.</div>`;
+
+    // Al abrir un chat, ir siempre al final (último mensaje)
+    if(scrollBottom){
+      requestAnimationFrame(() => {
+        const m = document.querySelector("main");
+        if(m) m.scrollTop = m.scrollHeight;
+      });
+    }
+
+    // enganchar estrellas
+    t.querySelectorAll(".stars").forEach(wrap=>{
+      wrap.querySelectorAll(".star").forEach(btn=>{
+        btn.onclick = () => puntuar(Number(wrap.dataset.id), wrap.dataset.var, Number(btn.dataset.n));
+      });
+    });
+    calcAvg();
+  }
+
+  function cardHtml(id, variante, titulo, texto){
+    const cuerpo = (texto && String(texto).trim())
+      ? escapeHtml(texto)
+      : `<span class="empty">— sin respuesta —</span>`;
+    return `<div class="card ${variante}">
+      <div class="head">${titulo}<span class="tag">${variante==='actual'?'original':'nueva'}</span></div>
+      <div class="body">${cuerpo}</div>
+      <div class="rate">${starsHtml(id,variante)}</div>
+    </div>`;
+  }
+
+  function escapeHtml(s){ return String(s??"").replace(/[&<>"']/g, c => (
+    {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+  function safeGet(k){ try{return localStorage.getItem(k)}catch(e){return null} }
+  function safeSet(k,v){ try{localStorage.setItem(k,v)}catch(e){} }
+
+  $("#refresh").onclick = () => cargar(false);
+  evalInput.addEventListener("change", ()=>{ if(activeKey) renderThread(); });
+
+  cargar(false);
+  // Refresco automático cada 15 s (sin saltar el scroll ni interrumpir)
+  setInterval(() => cargar(true), 15000);
+})();
+</script>
+</body>
+</html>
