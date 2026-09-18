@@ -28,17 +28,12 @@
     //    Para mover el arranque, cambiá esta marca. Vaciá el string para ver todo.
     desdeFecha: "2026-09-18T13:44:00Z",
 
-    // 5) Modo ciego: oculta qué Camila es cada columna y alterna su posición,
-    //    para que el evaluador puntúe el texto y no la etiqueta.
-    //    El intercambio es determinista por id de mensaje: la misma respuesta
-    //    cae siempre del mismo lado, en cualquier recarga y para todos.
-    modoCiego: true,
-
-    // Clave para revelar los nombres. Se guarda el SHA-256, no la clave.
-    //    La de fábrica es "camila2026" y está en un repo público: CAMBIALA.
-    //    Para generar el hash de la tuya, sin que salga de tu máquina:
-    //      node -e "console.log(require('crypto').createHash('sha256').update('TU-CLAVE').digest('hex'))"
-    claveMaestraSha256: "9c69d0f93105532987f8cc595288aa6a450f55f843125537db8f9facd489d603",
+    // 5) Contactos que nunca se muestran (números de prueba, internos, etc.).
+    //    Se compara contra contact_id, telefono y user_id. Sus filas ni
+    //    siquiera se traen de la base.
+    contactosOcultos: [
+      "573505903076",   // número de pruebas: acumulaba 279 comparables y desbalanceaba la muestra
+    ],
 
     // --- Nombres de columnas (ajustá solo si tu tabla usa otros) ---
     col: {
@@ -63,8 +58,6 @@
     --cliente-bg:#eef2ff; --cliente-bd:#c7d2fe;
     --actual:#0f766e; --actual-bg:#ecfdf5; --actual-bd:#99f6e4;
     --paralela:#7c3aed; --paralela-bg:#f5f3ff; --paralela-bd:#ddd6fe;
-    --ciegoA:#475569; --ciegoA-bg:#f1f5f9; --ciegoA-bd:#cbd5e1;
-    --ciegoB:#57534e; --ciegoB-bg:#fafaf9; --ciegoB-bd:#d6d3d1;
     --star:#f59e0b; --star-off:#d1d5db;
     --accent:#2563eb; --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
   }
@@ -74,8 +67,6 @@
     --cliente-bg:#1c2233; --cliente-bd:#33406a;
     --actual:#2dd4bf; --actual-bg:#0c2420; --actual-bd:#155e56;
     --paralela:#a78bfa; --paralela-bg:#1c1633; --paralela-bd:#4c3a86;
-    --ciegoA:#94a3b8; --ciegoA-bg:#151b24; --ciegoA-bd:#334155;
-    --ciegoB:#a8a29e; --ciegoB-bg:#1c1a19; --ciegoB-bd:#44403c;
     --star:#fbbf24; --star-off:#3b475a;
     --accent:#60a5fa; --shadow:0 1px 3px rgba(0,0,0,.4);
   }}
@@ -85,8 +76,6 @@
     --cliente-bg:#1c2233; --cliente-bd:#33406a;
     --actual:#2dd4bf; --actual-bg:#0c2420; --actual-bd:#155e56;
     --paralela:#a78bfa; --paralela-bg:#1c1633; --paralela-bd:#4c3a86;
-    --ciegoA:#94a3b8; --ciegoA-bg:#151b24; --ciegoA-bd:#334155;
-    --ciegoB:#a8a29e; --ciegoB-bg:#1c1a19; --ciegoB-bd:#44403c;
     --star:#fbbf24; --star-off:#3b475a;
     --accent:#60a5fa; --shadow:0 1px 3px rgba(0,0,0,.4);
   }
@@ -139,12 +128,9 @@
   .cmp{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   .card{border:1px solid var(--border);border-radius:14px;background:var(--panel);box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column}
   .card.actual{border-color:var(--actual-bd)} .card.paralela{border-color:var(--paralela-bd)}
-  .card.ciegoA{border-color:var(--ciegoA-bd)} .card.ciegoB{border-color:var(--ciegoB-bd)}
   .card .head{display:flex;align-items:center;gap:8px;padding:9px 13px;font-weight:700;font-size:12.5px}
   .card.actual .head{background:var(--actual-bg);color:var(--actual)}
   .card.paralela .head{background:var(--paralela-bg);color:var(--paralela)}
-  .card.ciegoA .head{background:var(--ciegoA-bg);color:var(--ciegoA)}
-  .card.ciegoB .head{background:var(--ciegoB-bg);color:var(--ciegoB)}
   .card .head .tag{margin-left:auto;font-size:10px;font-weight:600;opacity:.7}
   .card .body{padding:12px 13px;white-space:pre-wrap;word-break:break-word;flex:1}
   .card .empty{color:var(--faint);font-style:italic}
@@ -176,12 +162,10 @@
 <header>
   <h1><span id="conn" class="dot"></span> Evaluación de Camila</h1>
   <div class="spacer"></div>
-  <span class="chip actual" id="chipA" title="Promedio Camila Actual">Actual <b id="avgA">–</b></span>
-  <span class="chip paralela" id="chipP" title="Promedio Camila Paralela">Paralela <b id="avgP">–</b></span>
-  <span class="chip" id="chipCiego" title="Los nombres están ocultos para no condicionar la puntuación">🙈 A ciegas</span>
+  <span class="chip actual" title="Promedio Camila Actual">Actual <b id="avgA">–</b></span>
+  <span class="chip paralela" title="Promedio Camila Paralela">Paralela <b id="avgP">–</b></span>
   <span class="chip">Puntuadas <b id="cnt">0</b></span>
   <input id="evaluador" class="name" placeholder="Tu nombre" />
-  <button id="nombres" class="btn" title="Revelar u ocultar qué Camila es cada columna">👁 Nombres</button>
   <button id="refresh" class="btn">↻ Actualizar</button>
   <button id="theme" class="btn" title="Tema">◐</button>
 </header>
@@ -195,32 +179,13 @@
   const app = $("#app");
   const C = CONFIG.col;
 
-  // ---- Modo ciego ----
-  // Se revela solo por esta pestaña: cerrarla vuelve a ocultar los nombres.
-  let revelado = (()=>{ try{ return sessionStorage.getItem("panel-revelado")==="1" }catch(e){ return false } })();
-  const ciego = () => CONFIG.modoCiego && !revelado;
-
-  // ¿Va Camila Actual a la derecha en este turno? Determinista por id: la misma
-  // respuesta cae siempre del mismo lado, en toda recarga y para todo evaluador.
-  // Sin esto, cada render barajaría de nuevo y el evaluador vería saltar las
-  // columnas entre refrescos automáticos.
-  function invertido(id){
-    let h = 2166136261;                       // FNV-1a sobre el id
-    for(const ch of String(id)){ h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
-    return ((h >>> 0) & 1) === 1;
-  }
-
-  async function sha256Hex(txt){
-    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(txt));
-    return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
-  }
-
-  function pintarModo(){
-    const oculto = ciego();
-    $("#chipA").style.display   = oculto ? "none" : "";
-    $("#chipP").style.display   = oculto ? "none" : "";
-    $("#chipCiego").style.display = oculto ? "" : "none";
-    $("#nombres").textContent = oculto ? "👁 Nombres" : "🙈 Ocultar";
+  // Un contacto se oculta si coincide por contact_id, telefono o user_id:
+  // no todas las filas traen los tres campos con el mismo valor.
+  const OCULTOS = new Set((CONFIG.contactosOcultos||[]).map(v => String(v).trim()).filter(Boolean));
+  function estaOculto(r){
+    return OCULTOS.has(String(r[C.contacto]??"")) ||
+           OCULTOS.has(String(r[C.telefono]??"")) ||
+           OCULTOS.has(String(r[C.usuario]??""));
   }
 
   // ---- Tema ----
@@ -294,6 +259,7 @@
       if(eC) throw eC;
 
       const keys = [...new Set((comps||[])
+        .filter(r => !estaOculto(r))
         .map(r => r[C.contacto] || r[C.telefono] || r[C.usuario])
         .filter(Boolean))];
 
@@ -353,6 +319,9 @@
   function agrupar(){
     const m = new Map();
     for(const r of mensajes){
+      // Segunda red: si una fila del contacto oculto llegó por otro campo
+      // (el filtro de la consulta usa solo la clave de agrupación), cae acá.
+      if(estaOculto(r)) continue;
       const key = r[C.contacto] || r[C.telefono] || r[C.usuario] || "sin-id";
       if(!m.has(key)) m.set(key, []);
       m.get(key).push(r);
@@ -385,16 +354,9 @@
       else { sp+=r.estrellas; np++; }
       turns.add(r.message_id);
     }
-    // A ciegas los promedios se ocultan: ver quién va ganando condiciona los
-    // turnos que faltan tanto como ver el nombre en la tarjeta.
-    $("#avgA").textContent = (!ciego() && na) ? (sa/na).toFixed(2) : "–";
-    $("#avgP").textContent = (!ciego() && np) ? (sp/np).toFixed(2) : "–";
+    $("#avgA").textContent = na? (sa/na).toFixed(2) : "–";
+    $("#avgP").textContent = np? (sp/np).toFixed(2) : "–";
     $("#cnt").textContent = turns.size;
-    if(ciego()){
-      $("#avgA").parentElement.style.outline = "none";
-      $("#avgP").parentElement.style.outline = "none";
-      return;
-    }
     // resaltar ganador
     $("#avgA").parentElement.style.outline = (na&&np&&sa/na>sp/np) ? "2px solid var(--actual)" : "none";
     $("#avgP").parentElement.style.outline = (na&&np&&sp/np>sa/na) ? "2px solid var(--paralela)" : "none";
@@ -490,21 +452,13 @@
           <div class="txt">${escapeHtml(r[C.mensaje]||"")}</div>
           <div class="time">${fmtTime(r[C.fecha])}</div></div>`;
       } else {
-        const id = r[C.id];
-        // La variante real ('actual'/'paralela') viaja siempre con la tarjeta,
-        // así que la puntuación se guarda bien aunque se muestren cambiadas.
-        let izq = { variante:"actual",   texto:r[C.original], titulo:"Camila Actual",   clase:"actual"   };
-        let der = { variante:"paralela", texto:r[C.mensaje],  titulo:"Camila Paralela", clase:"paralela" };
-        if(ciego()){
-          if(invertido(id)) [izq, der] = [der, izq];   // alterna el lado
-          izq = { ...izq, titulo:"Respuesta A", clase:"ciegoA" };
-          der = { ...der, titulo:"Respuesta B", clase:"ciegoB" };
-        }
+        const actual = r[C.original];   // Camila Actual (izquierda)
+        const paralela = r[C.mensaje];  // Camila Paralela (derecha)
         html += `<div>
           <div class="time-badge">Respuesta de Camila · ${fmtTime(r[C.fecha])}</div>
           <div class="cmp">
-            ${cardHtml(id, izq.variante, izq.titulo, izq.texto, izq.clase)}
-            ${cardHtml(id, der.variante, der.titulo, der.texto, der.clase)}
+            ${cardHtml(r[C.id], "actual", "Camila Actual", actual)}
+            ${cardHtml(r[C.id], "paralela", "Camila Paralela", paralela)}
           </div></div>`;
       }
     }
@@ -527,14 +481,12 @@
     calcAvg();
   }
 
-  function cardHtml(id, variante, titulo, texto, clase){
+  function cardHtml(id, variante, titulo, texto){
     const cuerpo = (texto && String(texto).trim())
       ? escapeHtml(texto)
       : `<span class="empty">— sin respuesta —</span>`;
-    // A ciegas la etiqueta original/nueva también delataría cuál es cuál.
-    const tag = ciego() ? "" : `<span class="tag">${variante==='actual'?'original':'nueva'}</span>`;
-    return `<div class="card ${clase||variante}">
-      <div class="head">${titulo}${tag}</div>
+    return `<div class="card ${variante}">
+      <div class="head">${titulo}<span class="tag">${variante==='actual'?'original':'nueva'}</span></div>
       <div class="body">${cuerpo}</div>
       <div class="rate">${starsHtml(id,variante)}</div>
     </div>`;
@@ -548,26 +500,6 @@
   $("#refresh").onclick = () => cargar(false);
   evalInput.addEventListener("change", ()=>{ if(activeKey) renderThread(); });
 
-  $("#nombres").onclick = async () => {
-    if(revelado){                                  // volver a ocultar: sin clave
-      revelado = false;
-      try{ sessionStorage.removeItem("panel-revelado") }catch(e){}
-    } else {
-      const clave = prompt("Clave maestra para revelar los nombres:");
-      if(clave === null) return;                   // canceló
-      let hash;
-      try{ hash = await sha256Hex(clave); }
-      catch(e){ alert("El navegador bloqueó el cifrado.\nAbrí la página por http(s), no con doble clic en el archivo."); return; }
-      if(hash !== CONFIG.claveMaestraSha256){ alert("Clave incorrecta."); return; }
-      revelado = true;
-      try{ sessionStorage.setItem("panel-revelado","1") }catch(e){}
-    }
-    pintarModo();
-    if(activeKey) renderThread();
-    calcAvg();
-  };
-
-  pintarModo();
   cargar(false);
   // Refresco automático cada 15 s (sin saltar el scroll ni interrumpir)
   setInterval(() => cargar(true), 15000);
