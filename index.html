@@ -21,10 +21,12 @@
     tablaRatings: "camila_ratings",
 
     // 4) Desde cuándo mostrar conversaciones (ISO 8601, UTC).
-    //    Camila Actual no se grabó hasta el 15/09/2026 13:45 UTC: antes de esa
-    //    marca hay ~4.000 respuestas con la columna izquierda vacía, que no se
-    //    pueden comparar y solo ensucian la vista. Vaciá el string para ver todo.
-    desdeFecha: "2026-09-15T13:45:00Z",
+    //    Arranque en limpio: la evaluación cuenta desde el 18/09/2026 13:44 UTC.
+    //    Todo lo anterior queda fuera de la vista (sigue en la base, no se borra):
+    //    hasta el 15/09 Camila Actual no se grababa, y entre el 15 y el 18 hubo
+    //    corridas con la base del normalizador caída.
+    //    Para mover el arranque, cambiá esta marca. Vaciá el string para ver todo.
+    desdeFecha: "2026-09-18T13:44:00Z",
 
     // --- Nombres de columnas (ajustá solo si tu tabla usa otros) ---
     col: {
