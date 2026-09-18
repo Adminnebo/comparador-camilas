@@ -20,6 +20,12 @@
     // Tabla de puntuaciones (creada por supabase-setup.sql). Normalmente no se cambia.
     tablaRatings: "camila_ratings",
 
+    // 4) Desde cuándo mostrar conversaciones (ISO 8601, UTC).
+    //    Camila Actual no se grabó hasta el 15/09/2026 13:45 UTC: antes de esa
+    //    marca hay ~4.000 respuestas con la columna izquierda vacía, que no se
+    //    pueden comparar y solo ensucian la vista. Vaciá el string para ver todo.
+    desdeFecha: "2026-09-15T13:45:00Z",
+
     // --- Nombres de columnas (ajustá solo si tu tabla usa otros) ---
     col: {
       id:        "id",
@@ -223,12 +229,13 @@
     try{
       // 1) Buscar los turnos comparables (ambas Camilas con contenido).
       //    Así ubicamos las conversaciones relevantes sin traer las 8k filas.
-      const { data:comps, error:eC } = await db.from(CONFIG.tablaMensajes)
+      let qComps = db.from(CONFIG.tablaMensajes)
         .select(`${C.id},${C.contacto},${C.telefono},${C.usuario}`)
         .neq(C.direccion, CONFIG.valorEntrante)
         .not(C.mensaje, "is", null)
-        .not(C.original, "is", null)
-        .limit(5000);
+        .not(C.original, "is", null);
+      if(CONFIG.desdeFecha) qComps = qComps.gte(C.fecha, CONFIG.desdeFecha);
+      const { data:comps, error:eC } = await qComps.limit(5000);
       if(eC) throw eC;
 
       const keys = [...new Set((comps||[])
@@ -241,9 +248,13 @@
       if(keys.length){
         // Descendente para que, aunque el servidor limite filas, entren las MÁS
         // recientes (donde están los turnos comparables nuevos); luego re-ordeno.
-        const { data, error:e1 } = await db.from(CONFIG.tablaMensajes)
+        let qMsgs = db.from(CONFIG.tablaMensajes)
           .select("*")
-          .in(C.contacto, keys)
+          .in(C.contacto, keys);
+        // Sin este corte se arrastra todo el historial del contacto, incluido
+        // el mes en que Camila Actual no se grababa.
+        if(CONFIG.desdeFecha) qMsgs = qMsgs.gte(C.fecha, CONFIG.desdeFecha);
+        const { data, error:e1 } = await qMsgs
           .order(C.fecha,{ascending:false})
           .limit(10000);
         if(e1) throw e1;
